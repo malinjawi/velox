@@ -78,6 +78,13 @@ class SparkCastHooks : public exec::CastHooks {
 
   exec::PolicyType getPolicy() const override;
 
+  bool useScientificNotationForDecimal() const override {
+    // Spark uses scientific notation when ANSI mode is OFF
+    // ANSI ON: plain format (e.g., "0.0000001")
+    // ANSI OFF: scientific notation (e.g., "1E-7")
+    return !config_.sparkAnsiEnabled();
+  }
+
  private:
   // Casts a number to a timestamp. The number is treated as the number of
   // seconds since the epoch (1970-01-01 00:00:00 UTC).

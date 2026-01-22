@@ -67,6 +67,11 @@ class PrestoCastHooks : public CastHooks {
 
   PolicyType getPolicy() const override;
 
+  bool useScientificNotationForDecimal() const override {
+    // Presto always uses plain string format for decimals
+    return false;
+  }
+
  private:
   const bool legacyCast_;
   TimestampToStringOptions options_ = {

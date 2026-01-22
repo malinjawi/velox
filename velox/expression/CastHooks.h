@@ -76,5 +76,11 @@ class CastHooks {
 
   /// Converts boolean to timestamp type.
   virtual Expected<Timestamp> castBooleanToTimestamp(bool seconds) const = 0;
+
+  /// Returns whether to use scientific notation for decimal-to-string casting.
+  /// When true, uses scientific notation (e.g., "1E-7") for small decimal values.
+  /// When false, uses plain string format (e.g., "0.0000001").
+  /// This corresponds to Spark's ANSI OFF vs ANSI ON behavior.
+  virtual bool useScientificNotationForDecimal() const = 0;
 };
 } // namespace facebook::velox::exec
