@@ -335,13 +335,15 @@ class DecimalUtil {
   /// @param scale The scale of decimal.
   /// @param maxSize The estimated max size of string.
   /// @param startPosition The start position to write from.
+  /// @param useScientificNotation If true, uses scientific notation for appropriate values (Spark ANSI OFF mode).
   /// @return The actual size of the string.
   template <typename T>
   static size_t castToString(
       T unscaledValue,
       int32_t scale,
       int32_t maxSize,
-      char* const startPosition) {
+      char* const startPosition,
+      bool useScientificNotation = false) {
     char* writePosition = startPosition;
     if (unscaledValue == 0) {
       *writePosition++ = '0';
@@ -352,37 +354,74 @@ class DecimalUtil {
         writePosition += scale;
       }
     } else {
-      if (unscaledValue < 0) {
+      bool isNegative = (unscaledValue < 0);
+      if (isNegative) {
         *writePosition++ = '-';
         unscaledValue = -unscaledValue;
       }
-      auto [position, errorCode] = std::to_chars(
-          writePosition,
-          writePosition + maxSize,
-          unscaledValue / DecimalUtil::kPowersOfTen[scale]);
-      VELOX_DCHECK_EQ(
-          errorCode,
-          std::errc(),
-          "Failed to cast decimal to varchar: {}",
-          std::make_error_code(errorCode).message());
-      writePosition = position;
-
-      if (scale > 0) {
-        *writePosition++ = '.';
-        uint128_t fraction = unscaledValue % DecimalUtil::kPowersOfTen[scale];
-        // Append leading zeros.
-        int numLeadingZeros = std::max(scale - countDigits(fraction), 0);
-        std::memset(writePosition, '0', numLeadingZeros);
-        writePosition += numLeadingZeros;
-        // Append remaining fraction digits.
-        auto result =
-            std::to_chars(writePosition, writePosition + maxSize, fraction);
+      
+      // Check if we should use scientific notation (Spark ANSI OFF behavior)
+      // Use scientific notation when the integral part is 0 and scale > 0
+      T integralPart = unscaledValue / DecimalUtil::kPowersOfTen[scale];
+      bool shouldUseScientific = useScientificNotation &&
+                                  integralPart == 0 &&
+                                  scale > 0 &&
+                                  unscaledValue != 0;
+      
+      if (shouldUseScientific) {
+        // Format as scientific notation: find the first non-zero digit
+        T fraction = unscaledValue % DecimalUtil::kPowersOfTen[scale];
+        int leadingZeros = scale - countDigits(fraction);
+        int exponent = -(leadingZeros + 1);
+        
+        // Write the significant digit(s)
+        auto result = std::to_chars(writePosition, writePosition + maxSize, fraction);
         VELOX_DCHECK_EQ(
             result.ec,
             std::errc(),
             "Failed to cast decimal to varchar: {}",
             std::make_error_code(result.ec).message());
         writePosition = result.ptr;
+        
+        // Write 'E' and exponent
+        *writePosition++ = 'E';
+        result = std::to_chars(writePosition, writePosition + maxSize, exponent);
+        VELOX_DCHECK_EQ(
+            result.ec,
+            std::errc(),
+            "Failed to cast decimal to varchar: {}",
+            std::make_error_code(result.ec).message());
+        writePosition = result.ptr;
+      } else {
+        // Use plain format (ANSI ON or when integral part is non-zero)
+        auto [position, errorCode] = std::to_chars(
+            writePosition,
+            writePosition + maxSize,
+            integralPart);
+        VELOX_DCHECK_EQ(
+            errorCode,
+            std::errc(),
+            "Failed to cast decimal to varchar: {}",
+            std::make_error_code(errorCode).message());
+        writePosition = position;
+
+        if (scale > 0) {
+          *writePosition++ = '.';
+          uint128_t fraction = unscaledValue % DecimalUtil::kPowersOfTen[scale];
+          // Append leading zeros.
+          int numLeadingZeros = std::max(scale - countDigits(fraction), 0);
+          std::memset(writePosition, '0', numLeadingZeros);
+          writePosition += numLeadingZeros;
+          // Append remaining fraction digits.
+          auto result =
+              std::to_chars(writePosition, writePosition + maxSize, fraction);
+          VELOX_DCHECK_EQ(
+              result.ec,
+              std::errc(),
+              "Failed to cast decimal to varchar: {}",
+              std::make_error_code(result.ec).message());
+          writePosition = result.ptr;
+        }
       }
     }
     return writePosition - startPosition;

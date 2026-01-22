@@ -6,8 +6,10 @@ Conversion Functions
 
     Explicitly cast a ``value`` to a specified ``type``.
     
-    **Note:** String-to-boolean casts are *ANSI compliant* (subject to :doc:`spark.ansi_enabled </configs>`).
-    When ANSI is enabled, invalid strings throw errors; when disabled, they return NULL.
+    **Note:** The following casts are *ANSI compliant* (subject to :doc:`spark.ansi_enabled </configs>`):
+    
+    * **String-to-boolean**: When ANSI is enabled, invalid strings throw errors; when disabled, they return NULL.
+    * **Decimal-to-string**: Always uses plain string representation (no scientific notation).
     
     For other cast types, follows the behavior when Spark ANSI mode is disabled:
 
@@ -212,6 +214,24 @@ Valid examples
   SELECT cast(cast('2000-01-01 12:21:56.100000' as timestamp) as string); -- '2000-01-01 12:21:56.1'
   SELECT cast(cast('2000-01-01 12:21:56.129900' as timestamp) as string); -- '2000-01-01 12:21:56.1299'
   SELECT cast(cast('10000-02-01 16:00:00.000' as timestamp) as string); -- '+10000-02-01 16:00:00'
+From DECIMAL
+^^^^^^^^^^^^
+
+*ANSI compliant*
+
+Casting a decimal to a string always uses plain string representation, never scientific notation.
+This matches Spark's ANSI mode behavior where decimal values are formatted with all digits explicitly shown.
+
+Valid examples
+
+::
+
+  SELECT cast(cast(123.45 as DECIMAL(5, 2)) as string); -- '123.45'
+  SELECT cast(cast(0.001 as DECIMAL(10, 6)) as string); -- '0.001000'
+  SELECT cast(cast(0.0000001 as DECIMAL(10, 7)) as string); -- '0.0000001'
+  SELECT cast(cast(1000000 as DECIMAL(10, 0)) as string); -- '1000000'
+  SELECT cast(cast(-123.456 as DECIMAL(6, 3)) as string); -- '-123.456'
+
   SELECT cast(cast('0384-01-01 08:00:00.000' as timestamp) as string); -- '0384-01-01 08:00:00'
   SELECT cast(cast('-0010-02-01 10:00:00.000' as timestamp) as string); -- '-0010-02-01 10:00:00'
 

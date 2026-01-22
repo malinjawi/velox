@@ -193,6 +193,88 @@ TEST_F(SparkCastExprTest, decimalToIntegral) {
   testDecimalToIntegralCasts<int8_t>();
 }
 
+TEST_F(SparkCastExprTest, decimalToString) {
+  // Test decimal-to-string casting with ANSI mode ON (default).
+  // ANSI ON: Always uses plain string representation (no scientific notation).
+  // ANSI OFF: Uses scientific notation for small decimal values.
+  
+  // Test with ANSI ON (plain string format).
+  queryCtx_->testingOverrideConfigUnsafe(
+      {{core::QueryConfig::kSparkAnsiEnabled, "true"}});
+  
+  // Short decimal tests.
+  auto shortDecimal1 = makeNullableFlatVector<int64_t>(
+      {12345, 100, 1, 10000, -12345, 0, std::nullopt},
+      DECIMAL(5, 2));
+  testCast(
+      shortDecimal1,
+      makeNullableFlatVector<std::string>(
+          {"123.45", "1.00", "0.01", "100.00", "-123.45", "0.00", std::nullopt}));
+
+  // Long decimal tests.
+  auto longDecimal1 = makeNullableFlatVector<int128_t>(
+      {HugeInt::build(0, 123456789),
+       HugeInt::build(0, 1000),
+       HugeInt::build(0, 1),
+       HugeInt::build(0, 10000000),
+       -HugeInt::build(0, 123456789),
+       0,
+       std::nullopt},
+      DECIMAL(20, 6));
+  testCast(
+      longDecimal1,
+      makeNullableFlatVector<std::string>(
+          {"123.456789",
+           "0.001000",
+           "0.000001",
+           "10.000000",
+           "-123.456789",
+           "0.000000",
+           std::nullopt}));
+
+  // Test very small decimals (plain format in ANSI mode).
+  auto smallDecimal = makeNullableFlatVector<int128_t>(
+      {HugeInt::build(0, 1),
+       HugeInt::build(0, 10),
+       HugeInt::build(0, 100)},
+      DECIMAL(20, 10));
+  testCast(
+      smallDecimal,
+      makeNullableFlatVector<std::string>(
+          {"0.0000000001", "0.0000000010", "0.0000000100"}));
+
+  // Test large integers (no scientific notation).
+  auto largeDecimal = makeNullableFlatVector<int128_t>(
+      {HugeInt::build(0, 1000000),
+       HugeInt::build(0, 10000000),
+       HugeInt::build(0, 100000000)},
+      DECIMAL(20, 0));
+  testCast(
+      largeDecimal,
+      makeNullableFlatVector<std::string>(
+          {"1000000", "10000000", "100000000"}));
+
+  // Test with ANSI OFF (scientific notation for small values).
+  queryCtx_->testingOverrideConfigUnsafe(
+      {{core::QueryConfig::kSparkAnsiEnabled, "false"}});
+  
+  // Small decimals should use scientific notation when ANSI is OFF.
+  testCast(
+      smallDecimal,
+      makeNullableFlatVector<std::string>(
+          {"1E-10", "1E-9", "1E-8"}));
+  
+  // Regular decimals still use plain format.
+  testCast(
+      shortDecimal1,
+      makeNullableFlatVector<std::string>(
+          {"123.45", "1.00", "0.01", "100.00", "-123.45", "0.00", std::nullopt}));
+
+  // Restore default ANSI config value.
+  queryCtx_->testingOverrideConfigUnsafe(
+      {{core::QueryConfig::kSparkAnsiEnabled, "false"}});
+}
+
 TEST_F(SparkCastExprTest, invalidDate) {
   testInvalidCast<int8_t>(
       "date", {12}, "Cast from TINYINT to DATE is not supported", TINYINT());
