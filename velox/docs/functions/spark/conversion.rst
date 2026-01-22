@@ -5,12 +5,8 @@ Conversion Functions
 .. spark:function:: cast(value AS type) -> type
 
     Explicitly cast a ``value`` to a specified ``type``.
-    
-    **Note:** The following casts are *ANSI compliant* (subject to :doc:`spark.ansi_enabled </configs>`):
-    
-    * **Decimal-to-string**: Always uses plain string representation (no scientific notation).
-    
-    For other cast types, follows the behavior when Spark ANSI mode is disabled:
+    Follows the behavior when Spark ANSI mode is disabled, and does not support
+    the behavior when ANSI is turned on:
 
     * If the ``value`` exceeds the range of the ``type``, no error is raised.
       Instead, the ``value`` is "wrapped" around.
@@ -159,12 +155,8 @@ Cast to Boolean
 From VARCHAR
 ^^^^^^^^^^^^
 
-*ANSI compliant* (subject to :doc:`spark.ansi_enabled </configs>`)
-
-The strings `t, f, y, n, 1, 0, yes, no, true, false` and their upper case
-equivalents are allowed to be casted to boolean.
-Casting from invalid strings throws an error when ANSI mode is enabled,
-or returns NULL when ANSI mode is disabled.
+The strings `t, f, y, n, 1, 0, yes, no, true, false` and their upper case equivalents are allowed to be casted to boolean.
+Casting from other strings to boolean throws.
 
 Valid examples
 
@@ -185,13 +177,13 @@ Invalid examples
 
 ::
 
-  SELECT cast('1.7E308' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('nan' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('infinity' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('12' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('-1' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('tr' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
-  SELECT cast('tru' as boolean); -- NULL (ANSI OFF) / ERROR (ANSI ON)
+  SELECT cast('1.7E308' as boolean); -- NULL // Invalid argument
+  SELECT cast('nan' as boolean); -- NULL // Invalid argument
+  SELECT cast('infinity' as boolean); -- NULL // Invalid argument
+  SELECT cast('12' as boolean); -- NULL // Invalid argument
+  SELECT cast('-1' as boolean); -- NULL // Invalid argument
+  SELECT cast('tr' as boolean); -- NULL // Invalid argument
+  SELECT cast('tru' as boolean); -- NULL // Invalid argument
 
 Cast to String
 --------------
@@ -216,18 +208,18 @@ Valid examples
 From DECIMAL
 ^^^^^^^^^^^^
 
-*ANSI compliant*
+*ANSI compliant* (subject to :doc:`spark.ansi_enabled </configs>`)
 
-Casting a decimal to a string always uses plain string representation, never scientific notation.
-This matches Spark's ANSI mode behavior where decimal values are formatted with all digits explicitly shown.
+Casting a decimal to a string uses plain string representation when ANSI mode is enabled,
+or scientific notation for small values when ANSI mode is disabled.
 
 Valid examples
 
 ::
 
   SELECT cast(cast(123.45 as DECIMAL(5, 2)) as string); -- '123.45'
-  SELECT cast(cast(0.001 as DECIMAL(10, 6)) as string); -- '0.001000'
-  SELECT cast(cast(0.0000001 as DECIMAL(10, 7)) as string); -- '0.0000001'
+  SELECT cast(cast(0.001 as DECIMAL(10, 6)) as string); -- '0.001000' (ANSI ON) / '1E-3' (ANSI OFF)
+  SELECT cast(cast(0.0000001 as DECIMAL(10, 7)) as string); -- '0.0000001' (ANSI ON) / '1E-7' (ANSI OFF)
   SELECT cast(cast(1000000 as DECIMAL(10, 0)) as string); -- '1000000'
   SELECT cast(cast(-123.456 as DECIMAL(6, 3)) as string); -- '-123.456'
 
