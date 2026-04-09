@@ -16,7 +16,11 @@
 #include <cstdint>
 #include <limits>
 
+#include <folly/ScopeGuard.h>
+#include <gtest/gtest.h>
+
 #include "velox/common/base/tests/GTestUtils.h"
+#include "velox/core/QueryConfig.h"
 #include "velox/functions/sparksql/tests/SparkFunctionBaseTest.h"
 
 namespace facebook::velox::functions::sparksql::test {
@@ -310,14 +314,39 @@ TEST_F(ArithmeticTest, UnaryMinus) {
 }
 
 TEST_F(ArithmeticTest, UnaryMinusOverflow) {
+  auto guard = folly::makeGuard([&] {
+    queryCtx_->testingOverrideConfigUnsafe(
+        {{core::QueryConfig::kSparkAnsiEnabled, "false"}});
+  });
+
+  // Float and double are unaffected by ANSI mode.
+  for (const auto& ansiEnabled : {"false", "true"}) {
+    queryCtx_->testingOverrideConfigUnsafe(
+        {{core::QueryConfig::kSparkAnsiEnabled, ansiEnabled}});
+
+    EXPECT_EQ(unaryminus<float>(-kInf), kInf);
+    EXPECT_TRUE(std::isnan(unaryminus<float>(kNan).value_or(0)));
+    EXPECT_EQ(unaryminus<double>(-kInf), kInf);
+    EXPECT_TRUE(std::isnan(unaryminus<double>(kNan).value_or(0)));
+  }
+
+  // In non-ANSI mode, negating min values wraps and returns the same value.
+  queryCtx_->testingOverrideConfigUnsafe(
+      {{core::QueryConfig::kSparkAnsiEnabled, "false"}});
+
   EXPECT_EQ(unaryminus<int8_t>(INT8_MIN), INT8_MIN);
   EXPECT_EQ(unaryminus<int16_t>(INT16_MIN), INT16_MIN);
   EXPECT_EQ(unaryminus<int32_t>(INT32_MIN), INT32_MIN);
   EXPECT_EQ(unaryminus<int64_t>(INT64_MIN), INT64_MIN);
-  EXPECT_EQ(unaryminus<float>(-kInf), kInf);
-  EXPECT_TRUE(std::isnan(unaryminus<float>(kNan).value_or(0)));
-  EXPECT_EQ(unaryminus<double>(-kInf), kInf);
-  EXPECT_TRUE(std::isnan(unaryminus<double>(kNan).value_or(0)));
+
+  // In ANSI mode, negating min values throws overflow.
+  queryCtx_->testingOverrideConfigUnsafe(
+      {{core::QueryConfig::kSparkAnsiEnabled, "true"}});
+
+  VELOX_ASSERT_THROW(unaryminus<int8_t>(INT8_MIN), "Arithmetic overflow");
+  VELOX_ASSERT_THROW(unaryminus<int16_t>(INT16_MIN), "Arithmetic overflow");
+  VELOX_ASSERT_THROW(unaryminus<int32_t>(INT32_MIN), "Arithmetic overflow");
+  VELOX_ASSERT_THROW(unaryminus<int64_t>(INT64_MIN), "Arithmetic overflow");
 }
 
 TEST_F(ArithmeticTest, Divide) {
